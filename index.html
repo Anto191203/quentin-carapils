@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Quentin et les Carapils</title>
+<style>
+  body {
+    margin: 0;
+    background: #2c1810;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: Arial, sans-serif;
+    color: #ffd700;
+    min-height: 100vh;
+    user-select: none;
+  }
+  h1 {
+    margin: 15px;
+    font-size: 32px;
+    text-shadow: 2px 2px 0 #000;
+  }
+  #info {
+    margin-bottom: 10px;
+    opacity: 0.85;
+    color: white;
+    text-align: center;
+  }
+  canvas {
+    background: linear-gradient(to bottom, #4a2c1a, #2c1810);
+    border: 4px solid #ffd700;
+    border-radius: 8px;
+    box-shadow: 0 0 30px rgba(255,215,0,0.3);
+  }
+  #hud {
+    display: flex;
+    gap: 40px;
+    margin-top: 15px;
+    font-size: 22px;
+    font-weight: bold;
+  }
+  #best {
+    opacity: 0.7;
+    font-size: 16px;
+    margin-top: 5px;
+    color: white;
+  }
+</style>
+</head>
+<body>
+  <h1>Quentin et les Carapils</h1>
+  <div id="info">Fleches gauche / droite pour bouger. Attrape un max de Carapils en 60 secondes !</div>
+  <canvas id="game" width="500" height="600"></canvas>
+  <div id="hud">
+    <div id="score">Score: 0</div>
+    <div id="time">Temps: 60</div>
+  </div>
+  <div id="best">Record: 0</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const timeEl = document.getElementById('time');
+const bestEl = document.getElementById('best');
+
+const W = canvas.width, H = canvas.height;
+const quentin = { x: W/2 - 30, y: H - 95, w: 60, h: 80 };
+const keys = {};
+let cans = [];
+let particles = [];
+let score = 0;
+let best = parseInt(localStorage.getItem('bestCarapils') || '0');
+let timeLeft = 60;
+let gameOver = false;
+let spawnTimer = 0;
+let lastTime = performance.now();
+
+bestEl.textContent = 'Record: ' + best;
+
+document.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if ((e.key === 'r' || e.key === 'R') && gameOver) restart();
+});
+document.addEventListener('keyup', e => keys[e.key] = false);
+
+function restart() {
+  cans = [];
+  particles = [];
+  score = 0;
+  timeLeft = 60;
+  gameOver = false;
+  quentin.x = W/2 - 30;
+  lastTime = performance.now();
+}
+
+function spawnCan() {
+  cans.push({
+    x: 20 + Math.random() * (W - 60),
+    y: -50,
+    w: 30,
+    h: 50,
+    speed: 2 + Math.random() * 3 + (60 - timeLeft) * 0.04,
+    rotation: 0,
+    spinSpeed: (Math.random() - 0.5) * 0.08
+  });
+}
+
+function drawCan(can) {
+  ctx.save();
+  ctx.translate(can.x + can.w/2, can.y + can.h/2);
+  ctx.rotate(can.rotation);
+  ctx.translate(-can.w/2, -can.h/2);
+  // can body
+  ctx.fillStyle = '#ffd700';
+  ctx.fillRect(0, 5, can.w, can.h - 10);
+  // highlight
+  ctx.fillStyle = '#ffeb80';
+  ctx.fillRect(3, 7, 4, can.h - 14);
+  // rings
+  ctx.fillStyle = '#b8860b';
+  ctx.fillRect(0, 0, can.w, 8);
+  ctx.fillRect(0, can.h - 8, can.w, 8);
+  // label
+  ctx.fillStyle = '#8b0000';
+  ctx.fillRect(2, can.h/2 - 8, can.w - 4, 16);
+  // text
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 9px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('CARA', can.w/2, can.h/2 + 3);
+  ctx.restore();
+}
+
+function drawQuentin() {
+  const x = quentin.x, y = quentin.y, w = quentin.w, h = quentin.h;
+  const cx = x + w/2;
+  const khaki = '#8b7d4b';
+  const khakiDark = '#6b5d35';
+  const skin = '#fdbcb4';
+
+  // shoes
+  ctx.fillStyle = '#2c1e0e';
+  ctx.fillRect(x + 13, y + h - 6, 18, 6);
+  ctx.fillRect(x + w - 31, y + h - 6, 18, 6);
+
+  // legs (khaki overalls)
+  ctx.fillStyle = khaki;
+  ctx.fillRect(x + 15, y + h - 22, 12, 18);
+  ctx.fillRect(x + w - 27, y + h - 22, 12, 18);
+  // leg seams
+  ctx.fillStyle = khakiDark;
+  ctx.fillRect(x + 20, y + h - 22, 1, 18);
+  ctx.fillRect(x + w - 22, y + h - 22, 1, 18);
+
+  // white t-shirt visible at top of chest
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x + 11, y + 34, w - 22, 10);
+
+  // arms raised up (skin, sticking out of t-shirt sleeves)
+  ctx.fillStyle = skin;
+  ctx.fillRect(x + 2, y + 22, 10, 25);
+  ctx.fillRect(x + w - 12, y + 22, 10, 25);
+
+  // overalls main body (bib + pants top)
+  ctx.fillStyle = khaki;
+  ctx.fillRect(x + 10, y + 40, w - 20, h - 62);
+  // overall straps going up over shoulders
+  ctx.fillRect(x + 14, y + 30, 7, 14);
+  ctx.fillRect(x + w - 21, y + 30, 7, 14);
+  // straps shadow
+  ctx.fillStyle = khakiDark;
+  ctx.fillRect(x + 14, y + 43, 7, 2);
+  ctx.fillRect(x + w - 21, y + 43, 7, 2);
+  // chest pocket
+  ctx.strokeStyle = khakiDark;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 23, y + 46, 14, 10);
+  // buttons on straps (gold)
+  ctx.fillStyle = '#d4a017';
+  ctx.beginPath();
+  ctx.arc(x + 17, y + 42, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + w - 17, y + 42, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // head
+  ctx.fillStyle = skin;
+  ctx.beginPath();
+  ctx.arc(cx, y + 24, 15, 0, Math.PI * 2);
+  ctx.fill();
+  // hair tufts showing below the cap on sides
+  ctx.fillStyle = '#3d2817';
+  ctx.fillRect(cx - 15, y + 20, 4, 6);
+  ctx.fillRect(cx + 11, y + 20, 4, 6);
+
+  // CASQUETTE ROUGE TRUMP
+  // visor (darker red, extending forward)
+  ctx.fillStyle = '#8b0000';
+  ctx.beginPath();
+  ctx.ellipse(cx + 3, y + 19, 18, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // cap dome
+  ctx.fillStyle = '#d32f2f';
+  ctx.beginPath();
+  ctx.arc(cx, y + 15, 16, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(cx - 16, y + 15, 32, 4);
+  // cap highlight
+  ctx.fillStyle = '#e85050';
+  ctx.fillRect(cx - 14, y + 6, 3, 10);
+  // cap band (darker red stripe at base)
+  ctx.fillStyle = '#a32020';
+  ctx.fillRect(cx - 16, y + 17, 32, 2);
+
+  // TRUMP text on cap
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 10px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('TRUMP', cx, y + 13);
+
+  // face
+  ctx.fillStyle = '#000';
+  ctx.fillRect(cx - 7, y + 25, 3, 3);
+  ctx.fillRect(cx + 4, y + 25, 3, 3);
+  // smile
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, y + 30, 4, 0, Math.PI);
+  ctx.stroke();
+
+  // NAME LABEL above head with gold background
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 2, y - 22, w - 4, 18);
+  ctx.fillStyle = '#ffd700';
+  ctx.fillRect(x + 4, y - 20, w - 8, 14);
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 13px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('QUENTIN', cx, y - 9);
+  // little arrow pointing down at Quentin
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath();
+  ctx.moveTo(cx - 4, y - 4);
+  ctx.lineTo(cx + 4, y - 4);
+  ctx.lineTo(cx, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function spawnParticles(x, y) {
+  for (let i = 0; i < 10; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 7,
+      vy: -Math.random() * 6 - 2,
+      life: 30,
+      color: Math.random() < 0.5 ? '#ffd700' : '#fff'
+    });
+  }
+}
+
+function update(dt) {
+  if (gameOver) return;
+
+  timeLeft -= dt / 1000;
+  if (timeLeft <= 0) {
+    timeLeft = 0;
+    gameOver = true;
+    if (score > best) {
+      best = score;
+      localStorage.setItem('bestCarapils', best);
+    }
+  }
+
+  const speed = 7;
+  if ((keys['ArrowLeft'] || keys['q'] || keys['Q']) && quentin.x > 0) quentin.x -= speed;
+  if ((keys['ArrowRight'] || keys['d'] || keys['D']) && quentin.x + quentin.w < W) quentin.x += speed;
+
+  spawnTimer += dt;
+  const spawnRate = Math.max(280, 800 - (60 - timeLeft) * 10);
+  if (spawnTimer > spawnRate) {
+    spawnCan();
+    spawnTimer = 0;
+  }
+
+  cans.forEach(c => {
+    c.y += c.speed;
+    c.rotation += c.spinSpeed;
+  });
+
+  cans = cans.filter(c => {
+    if (c.y > H) return false;
+    if (quentin.x < c.x + c.w && quentin.x + quentin.w > c.x &&
+        quentin.y < c.y + c.h && quentin.y + quentin.h > c.y) {
+      score++;
+      spawnParticles(c.x + c.w/2, c.y + c.h/2);
+      return false;
+    }
+    return true;
+  });
+
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.3;
+    p.life--;
+  });
+  particles = particles.filter(p => p.life > 0);
+
+  scoreEl.textContent = 'Score: ' + score;
+  timeEl.textContent = 'Temps: ' + Math.ceil(timeLeft);
+  bestEl.textContent = 'Record: ' + best;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  // floor
+  ctx.fillStyle = '#1a0e06';
+  ctx.fillRect(0, H - 15, W, 15);
+
+  cans.forEach(drawCan);
+  drawQuentin();
+
+  particles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life / 30;
+    ctx.fillRect(p.x, p.y, 4, 4);
+  });
+  ctx.globalAlpha = 1;
+
+  if (gameOver) {
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 42px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('FINI !', W/2, H/2 - 60);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 24px Arial';
+    ctx.fillText('Quentin a bu ' + score + ' Carapils', W/2, H/2 - 10);
+    if (score >= best && score > 0) {
+      ctx.fillStyle = '#ffd700';
+      ctx.font = 'bold 20px Arial';
+      ctx.fillText('Nouveau record !', W/2, H/2 + 25);
+    }
+    ctx.fillStyle = 'white';
+    ctx.font = '18px Arial';
+    ctx.fillText('Appuie sur R pour rejouer', W/2, H/2 + 70);
+  }
+}
+
+function loop(now) {
+  const dt = now - lastTime;
+  lastTime = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
